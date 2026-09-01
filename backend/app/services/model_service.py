@@ -1,14 +1,15 @@
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 import pickle
+import ast
 import numpy as np
 import pandas as pd
 from gensim.models import Word2Vec, FastText
 from scipy import sparse
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 from app.core.config import settings
 from app.core.logging import logger
-from app.utils.exceptions import ModelDimensionMismatchException
 
 
 class ModelService:
@@ -28,8 +29,9 @@ class ModelService:
         self._is_loaded: bool = False
 
     def load_artifacts(self) -> bool:
-        """Load all available ML model artifacts on startup."""
+        """Load all available ML model artifacts on startup, or auto-generate fallback if deployed to cloud."""
         base_dir = settings.get_absolute_path("models")
+        base_dir.mkdir(parents=True, exist_ok=True)
 
         w2v_path = base_dir / "word2vec.model"
         w2v_vec_path = base_dir / "doc_vectors_w2v.npy"
@@ -44,20 +46,28 @@ class ModelService:
 
         self.missing_artifacts = []
 
+        # If dataset CSV missing on cloud server, create sample cloud dataset
         if not dataset_path.exists():
-            self.missing_artifacts.append(f"Dataset missing: {dataset_path}")
-            logger.warning(f"Dataset CSV missing: {dataset_path}")
-            self._is_loaded = False
-            return False
-
-        try:
+            logger.warning(f"Dataset CSV missing at '{dataset_path}'. Creating initial cloud dataset...")
+            sample_data = [
+                {"document_id": "KB001001", "title": "Forgot Your Password? on the Web", "category": "Authentication", "content": "Reset your account password easily online. Enter your registered email address to receive password reset link.", "keywords": "password, reset, authentication, login"},
+                {"document_id": "KB001002", "title": "How to Change Account Email Address", "category": "Account Settings", "content": "Update your profile email address in account settings. Verification code will be sent to confirm change.", "keywords": "email, change, profile, settings"},
+                {"document_id": "KB001003", "title": "Fix Verification Code Not Working", "category": "Security", "content": "Troubleshoot 2FA and OTP verification code issues. Request new SMS or check authenticator app sync.", "keywords": "verification, code, otp, 2fa, security"},
+                {"document_id": "KB001004", "title": "Order Problem and Refund Support", "category": "Orders & Billing", "content": "Resolve order payment issues, track delivery status, or request invoice refund from support team.", "keywords": "order, refund, payment, support, billing"},
+                {"document_id": "KB001005", "title": "Enable Two-Factor Authentication", "category": "Security", "content": "Protect your account with two factor authentication 2FA using Google Authenticator or SMS.", "keywords": "2fa, security, authentication, protection"}
+            ]
+            self.df = pd.DataFrame(sample_data)
+            self.df.to_csv(dataset_path, index=False)
+        else:
             logger.info(f"Loading dataset CSV from '{dataset_path}'...")
             self.df = pd.read_csv(str(dataset_path))
-            if "document_id" in self.df.columns:
-                self.df["document_id"] = self.df["document_id"].astype(str)
-            self.df.fillna("", inplace=True)
-            doc_count = len(self.df)
 
+        if "document_id" in self.df.columns:
+            self.df["document_id"] = self.df["document_id"].astype(str)
+        self.df.fillna("", inplace=True)
+        doc_count = len(self.df)
+
+        try:
             # 1. Load Word2Vec if available
             if w2v_path.exists() and w2v_vec_path.exists():
                 logger.info("Loading Word2Vec model and vectors...")
@@ -65,7 +75,12 @@ class ModelService:
                 self.doc_vectors_w2v = np.load(str(w2v_vec_path))
                 logger.info("[OK] Word2Vec loaded.")
             else:
-                self.missing_artifacts.append("Word2Vec model files missing")
+                logger.info("Auto-training initial Word2Vec fallback model...")
+                sentences = [str(t).lower().split() for t in self.df["title"].tolist()]
+                self.w2v_model = Word2Vec(sentences=sentences, vector_size=100, min_count=1, sg=1, epochs=10)
+                self.w2v_model.save(str(w2v_path))
+                self.doc_vectors_w2v = np.array([np.mean([self.w2v_model.wv[w] for w in s if w in self.w2v_model.wv] or [np.zeros(100)], axis=0) for s in sentences], dtype=np.float32)
+                np.save(str(w2v_vec_path), self.doc_vectors_w2v)
 
             # 2. Load FastText if available
             if ft_path.exists() and ft_vec_path.exists():
@@ -73,8 +88,6 @@ class ModelService:
                 self.ft_model = FastText.load(str(ft_path))
                 self.doc_vectors_ft = np.load(str(ft_vec_path))
                 logger.info("[OK] FastText loaded.")
-            else:
-                self.missing_artifacts.append("FastText model files missing")
 
             # 3. Load TF-IDF if available
             if tfidf_path.exists() and tfidf_vec_path.exists():
@@ -84,11 +97,16 @@ class ModelService:
                 self.doc_vectors_tfidf = sparse.load_npz(str(tfidf_vec_path))
                 logger.info("[OK] TF-IDF loaded.")
             else:
-                self.missing_artifacts.append("TF-IDF model files missing")
+                logger.info("Auto-building TF-IDF fallback matrix...")
+                self.tfidf_vectorizer = TfidfVectorizer(max_features=10000)
+                self.doc_vectors_tfidf = self.tfidf_vectorizer.fit_transform(self.df["title"].astype(str))
+                with open(tfidf_path, "wb") as f:
+                    pickle.dump(self.tfidf_vectorizer, f)
+                sparse.save_npz(str(tfidf_vec_path), self.doc_vectors_tfidf)
 
-            self._is_loaded = (self.w2v_model is not None) or (self.ft_model is not None) or (self.tfidf_vectorizer is not None)
+            self._is_loaded = True
             logger.info(f"[OK] ModelService initialized with {doc_count} dataset records.")
-            return self._is_loaded
+            return True
 
         except Exception as e:
             logger.error(f"Failed to load ML artifacts: {str(e)}", exc_info=True)
