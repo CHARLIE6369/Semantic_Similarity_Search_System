@@ -37,13 +37,17 @@ origins = settings.CORS_ORIGINS
 if isinstance(origins, str):
     origins = [o.strip() for o in origins.split(",") if o.strip()]
 
-if not origins:
-    origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"]
+if not origins or "*" in origins:
+    allow_origins = ["*"]
+    allow_credentials = False
+else:
+    allow_origins = origins
+    allow_credentials = True
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=allow_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
