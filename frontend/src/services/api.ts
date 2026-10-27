@@ -1,6 +1,7 @@
 import type { SearchRequest, SearchResponse, Document, HealthStatus, CategoriesResponse, ModelsResponse, ModelOption } from '../types/search';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const rawUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1').trim().replace(/\/+$/, '');
+const API_BASE_URL = rawUrl.endsWith('/api/v1') ? rawUrl : `${rawUrl}/api/v1`;
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {

@@ -85,25 +85,32 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         </span>
         {activeModels.map((m) => {
           const isSelected = selectedModel === m.id;
+          const isAvailable = m.available !== false;
           const icon = MODEL_ICONS[m.id] || <Cpu className="w-3.5 h-3.5" />;
 
           return (
             <button
               key={m.id}
               type="button"
-              onClick={() => handleModelChange(m.id)}
-              className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer flex items-center gap-2 ${
-                isSelected
-                  ? 'bg-gradient-to-r from-cyan-500 via-teal-500 to-indigo-600 text-slate-950 shadow-lg shadow-cyan-500/30 scale-105 border border-cyan-300 font-extrabold'
-                  : 'bg-slate-900/90 text-slate-300 border border-slate-700/80 hover:border-cyan-500/60 hover:text-white hover:shadow-md'
+              disabled={!isAvailable}
+              onClick={() => isAvailable && handleModelChange(m.id)}
+              className={`relative px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2 ${
+                !isAvailable
+                  ? 'opacity-45 cursor-not-allowed bg-slate-900/50 text-slate-500 border border-slate-800'
+                  : isSelected
+                    ? 'bg-gradient-to-r from-cyan-500 via-teal-500 to-indigo-600 text-slate-950 shadow-lg shadow-cyan-500/30 scale-105 border border-cyan-300 font-extrabold cursor-pointer'
+                    : 'bg-slate-900/90 text-slate-300 border border-slate-700/80 hover:border-cyan-500/60 hover:text-white hover:shadow-md cursor-pointer'
               }`}
-              title={m.description}
+              title={isAvailable ? m.description : `${m.name} is currently not loaded on the backend server`}
             >
-              <span className={isSelected ? 'text-slate-950 font-extrabold' : 'text-cyan-400'}>
+              <span className={isSelected ? 'text-slate-950 font-extrabold' : isAvailable ? 'text-cyan-400' : 'text-slate-500'}>
                 {icon}
               </span>
               <span>{m.name}</span>
-              {isSelected && (
+              {!isAvailable && (
+                <span className="text-[10px] text-rose-400 font-semibold px-1 rounded bg-rose-950/40 border border-rose-800/40">Offline</span>
+              )}
+              {isSelected && isAvailable && (
                 <span className="w-2 h-2 rounded-full bg-slate-950 animate-pulse shadow-xs" />
               )}
             </button>

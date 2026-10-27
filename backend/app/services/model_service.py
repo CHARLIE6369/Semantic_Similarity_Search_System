@@ -88,6 +88,17 @@ class ModelService:
                 self.ft_model = FastText.load(str(ft_path))
                 self.doc_vectors_ft = np.load(str(ft_vec_path))
                 logger.info("[OK] FastText loaded.")
+            else:
+                logger.info("Auto-training initial FastText fallback model...")
+                sentences = [str(t).lower().split() for t in self.df["title"].tolist()]
+                self.ft_model = FastText(sentences=sentences, vector_size=100, min_count=1, sg=1, epochs=10)
+                self.ft_model.save(str(ft_path))
+                self.doc_vectors_ft = np.array([
+                    np.mean([self.ft_model.wv[w] for w in s if w in self.ft_model.wv] or [np.zeros(100)], axis=0)
+                    for s in sentences
+                ], dtype=np.float32)
+                np.save(str(ft_vec_path), self.doc_vectors_ft)
+                logger.info("[OK] FastText fallback model trained and loaded.")
 
             # 3. Load TF-IDF if available
             if tfidf_path.exists() and tfidf_vec_path.exists():
