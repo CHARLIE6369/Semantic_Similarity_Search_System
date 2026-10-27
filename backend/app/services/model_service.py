@@ -74,9 +74,9 @@ class ModelService:
         doc_count = len(self.df)
 
         try:
-            # Prepare rich sentences using title, content and keywords for complete vocabulary
+            # Lightweight memory-safe sentences (title + keywords) to fit within Render 512MB RAM
             combined_texts = [
-                f"{row.get('title', '')} {row.get('content', '')} {row.get('keywords', '')}".lower()
+                f"{row.get('title', '')} {row.get('keywords', '')}".lower()
                 for _, row in self.df.iterrows()
             ]
             sentences = [t.split() for t in combined_texts]
@@ -89,7 +89,7 @@ class ModelService:
                 logger.info("[OK] Word2Vec loaded.")
             else:
                 logger.info("Auto-training initial Word2Vec fallback model...")
-                self.w2v_model = Word2Vec(sentences=sentences, vector_size=100, min_count=1, sg=1, epochs=5)
+                self.w2v_model = Word2Vec(sentences=sentences, vector_size=100, min_count=1, sg=1, epochs=3)
                 self.w2v_model.save(str(w2v_path))
                 self.doc_vectors_w2v = np.array([
                     np.mean([self.w2v_model.wv[w] for w in s if w in self.w2v_model.wv] or [np.zeros(100)], axis=0)
@@ -106,7 +106,8 @@ class ModelService:
                 logger.info("[OK] FastText loaded.")
             else:
                 logger.info("Auto-training initial FastText fallback model...")
-                self.ft_model = FastText(sentences=sentences, vector_size=100, min_count=1, sg=1, epochs=5)
+                # Note: bucket=25000 keeps memory under 15MB instead of 800MB (Render 512MB RAM limit)
+                self.ft_model = FastText(sentences=sentences, vector_size=100, bucket=25000, min_count=1, sg=1, epochs=3)
                 self.ft_model.save(str(ft_path))
                 self.doc_vectors_ft = np.array([
                     np.mean([self.ft_model.wv[w] for w in s if w in self.ft_model.wv] or [np.zeros(100)], axis=0)
