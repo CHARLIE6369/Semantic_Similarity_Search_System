@@ -71,7 +71,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 def root():
     return {
         "name": settings.APP_NAME,
-        "version": settings.APP_VERSION,
+        "version": "1.1.0-seed3k",
         "docs": "/docs",
         "health": "/api/v1/health"
     }

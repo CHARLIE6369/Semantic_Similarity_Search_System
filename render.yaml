@@ -3,7 +3,7 @@ services:
   # 1. FastAPI Backend Web Service
   # ---------------------------------------------------------
   - type: web
-    name: semantic-search-backend
+    name: semantic-similarity-search-system
     env: python
     region: singapore
     plan: free

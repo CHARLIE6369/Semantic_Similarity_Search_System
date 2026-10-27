@@ -87,7 +87,10 @@ class SearchService:
         # Rank descending
         filtered_scores = similarity_scores[matching_indices]
         sorted_rel_order = np.argsort(filtered_scores)[::-1]
-        top_rel_indices = sorted_rel_order[:top_k]
+        
+        # Only retain documents with meaningful similarity score (> 0.0001)
+        positive_rel_order = [i for i in sorted_rel_order if filtered_scores[i] > 0.0001]
+        top_rel_indices = positive_rel_order[:top_k]
 
         final_indices = matching_indices[top_rel_indices]
         final_scores = filtered_scores[top_rel_indices]
